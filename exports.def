@@ -1,0 +1,6 @@
+EXPORTS  
+	ToVariant  @1 
+	FromVariant  @2
+	DeleteVariant  @3
+	GetError  @4
+	SizeOfBool  @5
