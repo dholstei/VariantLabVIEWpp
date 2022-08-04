@@ -72,7 +72,13 @@ public:
     char type;  //  redundent since index() maps to VAR_TYPES
     string name;
     variant<VAR_TYPES> data;
-    VarObj(string n, int32_t d) {type = TD::I32; name = n; data = d; addr = this;}
+    VarObj(string n,   int8_t d) {type = TD::I8;  name = n; data = d; addr = this;}
+    VarObj(string n,  uint8_t d) {type = TD::U8;  name = n; data = d; addr = this;}
+    VarObj(string n,  int16_t d) {type = TD::I16; name = n; data = d; addr = this;}
+    VarObj(string n, uint16_t d) {type = TD::U16; name = n; data = d; addr = this;}
+    VarObj(string n,  int32_t d) {type = TD::I32; name = n; data = d; addr = this;}
+    VarObj(string n, uint32_t d) {type = TD::U32; name = n; data = d; addr = this;}
+    VarObj(string n, string   d) {type = TD::U32; name = n; data = d; addr = this;}
 
     bool operator< (const VarObj rhs) const { return addr < rhs.addr; }
     bool operator<= (const VarObj rhs) const { return addr <= rhs.addr; }
@@ -113,8 +119,18 @@ void* ToVariant(U8ArrayHdl TypeStr, LStrHandle Data, LStrHandle Image, bool GetI
         nm = string((char*) &(tStr->c[1]), (char) tStr->c[0]);
         switch (tStr->type)
         {
+        case TD::I8 :
+            V = new VarObj(nm, *((int8_t*)   (**Data).str)); break;
+        case TD::U8 :
+            V = new VarObj(nm, *((uint8_t*)  (**Data).str)); break;
+        case TD::I16:
+            V = new VarObj(nm, *((int16_t*)  (**Data).str)); break;
+        case TD::U16:
+            V = new VarObj(nm, *((uint16_t*) (**Data).str)); break;
         case TD::I32:
-            V = new VarObj(nm, *((int32_t*) (**Data).str)); break;
+            V = new VarObj(nm, *((int32_t*)  (**Data).str)); break;
+        case TD::U32:
+            V = new VarObj(nm, *((uint32_t*) (**Data).str)); break;
         default:
             ObjectErr = true; ObjectErrStr = "Unsupported data type: " + (tStr->type);
             break;
