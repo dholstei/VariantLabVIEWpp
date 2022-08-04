@@ -15,7 +15,7 @@
 using namespace std;
 
 #if 1   //  LabVIEW stuff
-#include "/usr/local/lv71/cintools/extcode.h"
+#include "extcode.h"
 typedef struct {
     long errnum;
     LStrHandle errstr;
@@ -58,27 +58,28 @@ LStrHandle LVStr(char* str, int size)
 //class LvType {public: enum e;}
 #endif //   LabVIEW stuff
 
-#define VAR_TYPES int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, float, double, string, uint8_t*
+#define VAR_TYPES int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, float, double, string*, uint8_t*
 uint8_t GetLVTD(int idx) {
     uint8_t types[] = {TD::I8, TD::U8, TD::I16, TD::U16, TD::U32, TD::I32, TD::SGL, TD::DBL, TD::String, TD::Array};
     return types[idx];
 }
 #define MAGIC 0x13131313    //  doesn't necessarily need to be unique to this, specific library
 
+static std::list<string> myVariantsStr, myVariantsNm;   //  where we store the actual strings and names
+
 class VarObj
 {
 public:
     void* addr;
-    char type;  //  redundent since index() maps to VAR_TYPES
-    string name;
+    string name, *nm;
     variant<VAR_TYPES> data;
-    VarObj(string n,   int8_t d) {type = TD::I8;  name = n; data = d; addr = this;}
-    VarObj(string n,  uint8_t d) {type = TD::U8;  name = n; data = d; addr = this;}
-    VarObj(string n,  int16_t d) {type = TD::I16; name = n; data = d; addr = this;}
-    VarObj(string n, uint16_t d) {type = TD::U16; name = n; data = d; addr = this;}
-    VarObj(string n,  int32_t d) {type = TD::I32; name = n; data = d; addr = this;}
-    VarObj(string n, uint32_t d) {type = TD::U32; name = n; data = d; addr = this;}
-    VarObj(string n, string   d) {type = TD::U32; name = n; data = d; addr = this;}
+    VarObj(string n,   int8_t d) {name = n; data = d; addr = this;}
+    VarObj(string n,  uint8_t d) {name = n; data = d; addr = this;}
+    VarObj(string n,  int16_t d) {name = n; data = d; addr = this;}
+    VarObj(string n, uint16_t d) {name = n; data = d; addr = this;}
+    VarObj(string n,  int32_t d) {name = n; data = d; addr = this;}
+    VarObj(string n, uint32_t d) {name = n; data = d; addr = this;}
+    //VarObj(string n, string*  d) {name = n; data = d; addr = this;}
 
     bool operator< (const VarObj rhs) const { return addr < rhs.addr; }
     bool operator<= (const VarObj rhs) const { return addr <= rhs.addr; }
@@ -116,24 +117,35 @@ void* ToVariant(U8ArrayHdl TypeStr, LStrHandle Data, LStrHandle Image, bool GetI
     if (!named) nm = "";
     else
     {
-        nm = string((char*) &(tStr->c[1]), (char) tStr->c[0]);
+        uint8_t NmStart;
         switch (tStr->type)
         {
-        case TD::I8 :
-            V = new VarObj(nm, *((int8_t*)   (**Data).str)); break;
-        case TD::U8 :
-            V = new VarObj(nm, *((uint8_t*)  (**Data).str)); break;
-        case TD::I16:
-            V = new VarObj(nm, *((int16_t*)  (**Data).str)); break;
-        case TD::U16:
-            V = new VarObj(nm, *((uint16_t*) (**Data).str)); break;
-        case TD::I32:
-            V = new VarObj(nm, *((int32_t*)  (**Data).str)); break;
-        case TD::U32:
-            V = new VarObj(nm, *((uint32_t*) (**Data).str)); break;
-        default:
-            ObjectErr = true; ObjectErrStr = "Unsupported data type: " + (tStr->type);
-            break;
+            case TD::String:
+                NmStart = 4; break;
+            default:
+                NmStart = 0; break;
+        }
+        nm = string((char*) &(tStr->c[NmStart + 1]), (char) tStr->c[NmStart]);
+        switch (tStr->type)
+        {
+            case TD::I8 :
+                V = new VarObj(nm, *((int8_t*)   (**Data).str)); break;
+            case TD::U8 :
+                V = new VarObj(nm, *((uint8_t*)  (**Data).str)); break;
+            case TD::I16:
+                V = new VarObj(nm, *((int16_t*)  (**Data).str)); break;
+            case TD::U16:
+                V = new VarObj(nm, *((uint16_t*) (**Data).str)); break;
+            case TD::I32:
+                V = new VarObj(nm, *((int32_t*)  (**Data).str)); break;
+            case TD::U32:
+                V = new VarObj(nm, *((uint32_t*)(**Data).str)); break;
+            //case TD::String:
+                //if (*((int*)(**Data).str) == 0) {V = new VarObj(nm, ""); break;} //  blank string
+                //V = new VarObj(nm, string((char*) &((**Data).str[4]), *((int*) (**Data).str))); break;
+            default:
+                ObjectErr = true; ObjectErrStr = "Unsupported data type: " + (tStr->type);
+                break;
         }
     }
     if (V != NULL)
@@ -141,37 +153,43 @@ void* ToVariant(U8ArrayHdl TypeStr, LStrHandle Data, LStrHandle Image, bool GetI
     return V;
 }
 
+#define LvTypeDecriptor(A) ((uInt16) GetLVTD(A->data.index()))
+
 int FromVariant(VarObj* LvVarObj, U8ArrayHdl TypeStr, LStrHandle Data, bool del) {
     TStrS* tStr;
     if (!IsVariant(LvVarObj)) return -1;
         int NmSz = (LvVarObj->name == ""? 0: LvVarObj->name.length() + 2 - LvVarObj->name.length() % 2);
-        switch ((uInt16) LvVarObj->type)    //  handle convertion to LV type strings
+        uint8_t NmOff; NmOff = (LvTypeDecriptor(LvVarObj) == TD::String ? 4 : 0);
+        switch LvTypeDecriptor(LvVarObj)    //  handle convertion to LV type strings
         {
         case TD::I8: case TD::U8: case TD::I16: case TD::U16: case TD::U32: case TD::I32:
             DSSetHandleSize(TypeStr, sizeof(int32) + 4 + NmSz);
-            (**TypeStr).dimSize = 4 + NmSz;
+            (**TypeStr).dimSize = 4 + NmOff + NmSz;
             tStr = (TStrS*)(**TypeStr).elt;
-            tStr->size = 4 + NmSz; tStr->type = LvVarObj->type;
+            tStr->fill = 0x00; tStr->size = 4 + NmOff + NmSz; tStr->type = LvTypeDecriptor(LvVarObj);
             if (LvVarObj->name != "")
-               {tStr->nm =  0x40; tStr->c[0] = LvVarObj->name.length();
-                memcpy(&tStr->c[1], LvVarObj->name.c_str(), tStr->c[0]);}
+               {tStr->nm =  0x40; tStr->c[NmOff] = LvVarObj->name.length();
+                memcpy(&tStr->c[1 + NmOff], LvVarObj->name.c_str(), tStr->c[NmOff]);}
             break;
         default:
-            ObjectErr = true; ObjectErrStr = "Unsupported data type: " + (LvVarObj->type);
+            ObjectErr = true; ObjectErrStr = "Unsupported data type: " + (LvTypeDecriptor(LvVarObj));
             return -1;
             break;
         }
 
-         switch (LvVarObj->type)    //  handle convertion to LV data strings
+         switch (LvTypeDecriptor(LvVarObj))    //  handle convertion to LV data strings
         {
         case TD::I8: case TD::U8:
             LV_str_cp(Data, string((char*) & LvVarObj->data, sizeof(int8))); break;
         case TD::I16: case TD::U16:
             LV_str_cp(Data, string((char*) & LvVarObj->data, sizeof(int16))); break;
         case TD::U32: case TD::I32:
-            LV_str_cp(Data, string((char*) & LvVarObj->data, sizeof(int32))); break;
+            LV_str_cp(Data, string((char*)&LvVarObj->data, sizeof(int32))); break;
+        //case TD::String:
+            //  LV_str_cp(Data, string(((string*) (LvVarObj->data)).c_str(), sizeof(int32)));
+            //LV_str_cp(Data, string((char*)&LvVarObj->data, sizeof(int32))); break;
         default:
-            ObjectErr = true; ObjectErrStr = "Unsupported data type: " + (LvVarObj->type);
+            ObjectErr = true; ObjectErrStr = "Unsupported data type: " + (LvTypeDecriptor(LvVarObj));
             return -1;
             break;
         }
