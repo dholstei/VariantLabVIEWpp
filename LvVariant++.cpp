@@ -84,12 +84,15 @@ class VarObj
 {
 public:
     void* addr;
+    bool IsNull = false;    //  NULL variants are important, DB and XML results can often return NULL
     string *name = NULL, *str = NULL;
     variant<VAR_TYPES> data;
-    VarObj(string n,  int32_t d) {data = d; addr = this; if (n.length() > 0) name = new string(n);}
+    VarObj(string n, int32_t d) {data = d; addr = this; if (n.length() > 0) name = new string(n);}
+    VarObj(string n, bool SetNull)
+        {IsNull = SetNull; addr = (SetNull ? this : NULL); if (n.length() > 0) name = new string(n);}
     VarObj(string n,  char* d, int sz) {
-        data = (string*) NULL; addr = this;
-        if (sz > 0) str = new string(d, sz);if (n.length() > 0) name = new string(n);}
+        data = (string*) NULL; addr = this; if (sz > 0) str = new string(d, sz);
+        if (n.length() > 0) name = new string(n);}
     ~VarObj() {delete name; delete str;}
 
     bool operator< (const VarObj rhs) const { return addr < rhs.addr; }
@@ -113,7 +116,8 @@ bool IsVariant(VarObj* addr) //  check for corruption/validity, use <list> to tr
     else { ObjectErr = true; ObjectErrStr = "Variant memory corrupted"; return false; }
 }
 
-struct TStrS {uInt8 fill; uInt8 size; uInt8 nm; uInt8 type; char c[0];}; //  match LabVIEW "Type String" structure/array
+struct TStrS {uInt8 fill; uInt8 size; uInt8 nm; uInt8 type;
+              union {char c[0]; struct {uInt16 ff[2]; char c[0];} s;} c;}; //  match LabVIEW "Type String" structure/array
 
 extern "C" {  //  functions to be called from LabVIEW.  'extern "C"' is necessary to prevent overload name mangling
 
@@ -124,52 +128,53 @@ void* ToVariant(U8ArrayHdl TypeStr, LStrHandle Data, LStrHandle Image, bool GetI
 
     TStrS *tStr = (TStrS*) (**TypeStr).elt;
     string nm; bool named = tStr->nm & 0x40;
-    VarObj *V = NULL;
+    VarObj *V = NULL; char* LvName = (tStr->type == TD::String? (char*) tStr->c.s.c : (char*) tStr->c.c);
     if (!named) nm = "";
-    else
+    else nm = string((char*) &(LvName[1]), LvName[0]);
+    
+    switch (tStr->type)
     {
-        uint8_t NmStart;
-        switch (tStr->type)
-        {
-            case TD::String:
-                NmStart = 4; break;
-            default:
-                NmStart = 0; break;
-        }
-        nm = string((char*) &(tStr->c[NmStart + 1]), (char) tStr->c[NmStart]);
-        switch (tStr->type)
-        {
-            case TD::I32:
-                V = new VarObj(nm, *((int32_t*)  (**Data).str)); break;
-            case TD::String:
-                V = new VarObj(nm, (char*) &((**Data).str[4]), *((int*) (**Data).str)); break;
-            default:
-                ObjectErr = true; ObjectErrStr = "Unsupported data type: " + (tStr->type);
-                break;
-        }
+    case TD::Void:    //  note, LabVIEW drops names on std flatten, though user can add
+        V = new VarObj(nm, true); break;
+    case TD::I32:
+        V = new VarObj(nm, *((int32_t*)  (**Data).str)); break;
+    case TD::String:
+        V = new VarObj(nm, (char*) &((**Data).str[4]), *((int*) (**Data).str)); break;
+    default:
+        ObjectErr = true; ObjectErrStr = "Unsupported data type: " + (tStr->type);
+        break;
     }
     if (V != NULL)
         {myVariants.push_back(V);if (GetImage) LV_str_cp(Image, string((char*) V, sizeof(VarObj)));}
     return V;
 }
 
-#define LvTypeDecriptor(A) ((uInt16) GetLVTD(A->data.index()))
+#define LvTypeDecriptor(A) ((uInt16) (A->IsNull ? 0 : GetLVTD(A->data.index())))
 
 int FromVariant(VarObj* LvVarObj, U8ArrayHdl TypeStr, LStrHandle Data, bool del) {
-    TStrS* tStr;
     if (!IsVariant(LvVarObj)) return -1;
-    int NmSz = (LvVarObj->name == NULL? 0: LvVarObj->name->length() + 2 - LvVarObj->name->length() % 2);
-    uint8_t NmOff; NmOff = (LvTypeDecriptor(LvVarObj) == TD::String ? 4 : 0);
+//  NmSz:   Size of LV type string, in bytes, though type string is cast by LabVIEW to I16 (padded up)
+//          It includes the standard 4 byte header, an extra 4 0xff for strings, then the byte length of
+//          the variant name plus the name itself.
+    uInt8 NmSz = (LvVarObj->name == NULL? 0: LvVarObj->name->length() + 2 - LvVarObj->name->length() % 2)
+                + 4 + (LvTypeDecriptor(LvVarObj) == TD::String ? 4 : 0);
+    DSSetHandleSize(TypeStr, sizeof(int32) + NmSz);
+    TStrS* tStr = (TStrS*) (**TypeStr).elt;
+    char* LvName;
+    if (LvTypeDecriptor(LvVarObj) == TD::String) LvName = tStr->c.s.c;  //  offset accomodated here
+    else  LvName = tStr->c.c;
     switch LvTypeDecriptor(LvVarObj)    //  handle convertion to LV type strings
     {
-    case TD::I8: case TD::U8: case TD::I16: case TD::U16: case TD::U32: case TD::I32: case TD::String:
-        DSSetHandleSize(TypeStr, sizeof(int32) + 4 + NmSz);
-        (**TypeStr).dimSize = 4 + NmOff + NmSz;
+    case TD::Void:
+    case TD::I8: case TD::U8: case TD::I16: case TD::U16: case TD::U32: case TD::I32:
+    case TD::String:
+        (**TypeStr).dimSize = NmSz;
         tStr = (TStrS*)(**TypeStr).elt;
-        tStr->fill = 0x00; tStr->size = 4 + NmOff + NmSz; tStr->type = LvTypeDecriptor(LvVarObj);
+        tStr->fill = 0x00; tStr->size = NmSz; tStr->type = LvTypeDecriptor(LvVarObj);
         if (LvVarObj->name != NULL)
-            {tStr->nm =  0x40; tStr->c[NmOff] = LvVarObj->name->length();
-            memcpy(&tStr->c[1 + NmOff], LvVarObj->name->c_str(), tStr->c[NmOff]);}
+            {tStr->nm =  0x40; LvName[0] = LvVarObj->name->length();
+            memcpy(&LvName[1], LvVarObj->name->c_str(), LvName[0]);}
+        if (LvTypeDecriptor(LvVarObj) == TD::String) tStr->c.s.ff[0] = tStr->c.s.ff[1] = 0xffff;
         break;
     default:
         ObjectErr = true; ObjectErrStr = "Unsupported data type: " + (LvTypeDecriptor(LvVarObj));
@@ -177,8 +182,10 @@ int FromVariant(VarObj* LvVarObj, U8ArrayHdl TypeStr, LStrHandle Data, bool del)
         break;
     }
 
-        switch (LvTypeDecriptor(LvVarObj))    //  handle convertion to LV data strings
+    switch (LvTypeDecriptor(LvVarObj))    //  handle convertion to LV data strings
     {
+    case TD::Void:
+        break;
     case TD::I8: case TD::U8:
         LV_str_cp(Data, string((char*) & LvVarObj->data, sizeof(int8))); break;
     case TD::I16: case TD::U16:
@@ -186,8 +193,12 @@ int FromVariant(VarObj* LvVarObj, U8ArrayHdl TypeStr, LStrHandle Data, bool del)
     case TD::U32: case TD::I32:
         LV_str_cp(Data, string((char*) & LvVarObj->data, sizeof(int32))); break;
     case TD::String:
-        int sz; sz = LvVarObj->str->length();
-        LV_str_cp(Data, (char*) &sz, sizeof(int)); LV_str_cat(Data, *(LvVarObj->str)); break;
+        int sz; sz = 0; 
+        if (LvVarObj->str != NULL)
+           {sz = LvVarObj->str->length();
+            LV_str_cp(Data, (char*) &sz, sizeof(int)); LV_str_cat(Data, *(LvVarObj->str));}
+        else LV_str_cp(Data, (char*) &sz, sizeof(int));
+        break;
     default:
         ObjectErr = true; ObjectErrStr = "Unsupported data type: " + (LvTypeDecriptor(LvVarObj));
         return -1;
