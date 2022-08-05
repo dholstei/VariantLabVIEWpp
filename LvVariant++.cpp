@@ -34,6 +34,19 @@ void LV_str_cp(LStrHandle LV_string, string c_str)
     (*LV_string)->cnt = c_str.length();
     memcpy((char*)(*LV_string)->str, &(c_str[0]), c_str.length());
 }
+void LV_str_cp(LStrHandle LV_string, char* c_str, int size)
+{
+    DSSetHandleSize(LV_string, sizeof(int) + size * sizeof(char));
+    (*LV_string)->cnt = size;
+    memcpy((char*)(*LV_string)->str, c_str, size);
+}
+void LV_str_cat(LStrHandle LV_string, string str)    //  concatenate C++ str to LSTR LV_string
+{
+    int n = (*LV_string)->cnt;
+    DSSetHandleSize(LV_string, sizeof(int) + n + str.length());
+    (*LV_string)->cnt = n + str.length();
+    memcpy((char*)(*LV_string)->str + n, str.c_str(), str.length());
+}
 LStrHandle LVStr(string str)    //  convert string to new LV string handle
 {
     if (str.length() == 0) return NULL;
@@ -71,15 +84,13 @@ class VarObj
 {
 public:
     void* addr;
-    string name, *nm;
+    string *name = NULL, *str = NULL;
     variant<VAR_TYPES> data;
-    VarObj(string n,   int8_t d) {name = n; data = d; addr = this;}
-    VarObj(string n,  uint8_t d) {name = n; data = d; addr = this;}
-    VarObj(string n,  int16_t d) {name = n; data = d; addr = this;}
-    VarObj(string n, uint16_t d) {name = n; data = d; addr = this;}
-    VarObj(string n,  int32_t d) {name = n; data = d; addr = this;}
-    VarObj(string n, uint32_t d) {name = n; data = d; addr = this;}
-    //VarObj(string n, string*  d) {name = n; data = d; addr = this;}
+    VarObj(string n,  int32_t d) {data = d; addr = this; if (n.length() > 0) name = new string(n);}
+    VarObj(string n,  char* d, int sz) {
+        data = (string*) NULL; addr = this;
+        if (sz > 0) str = new string(d, sz);if (n.length() > 0) name = new string(n);}
+    ~VarObj() {delete name; delete str;}
 
     bool operator< (const VarObj rhs) const { return addr < rhs.addr; }
     bool operator<= (const VarObj rhs) const { return addr <= rhs.addr; }
@@ -128,21 +139,10 @@ void* ToVariant(U8ArrayHdl TypeStr, LStrHandle Data, LStrHandle Image, bool GetI
         nm = string((char*) &(tStr->c[NmStart + 1]), (char) tStr->c[NmStart]);
         switch (tStr->type)
         {
-            case TD::I8 :
-                V = new VarObj(nm, *((int8_t*)   (**Data).str)); break;
-            case TD::U8 :
-                V = new VarObj(nm, *((uint8_t*)  (**Data).str)); break;
-            case TD::I16:
-                V = new VarObj(nm, *((int16_t*)  (**Data).str)); break;
-            case TD::U16:
-                V = new VarObj(nm, *((uint16_t*) (**Data).str)); break;
             case TD::I32:
                 V = new VarObj(nm, *((int32_t*)  (**Data).str)); break;
-            case TD::U32:
-                V = new VarObj(nm, *((uint32_t*)(**Data).str)); break;
-            //case TD::String:
-                //if (*((int*)(**Data).str) == 0) {V = new VarObj(nm, ""); break;} //  blank string
-                //V = new VarObj(nm, string((char*) &((**Data).str[4]), *((int*) (**Data).str))); break;
+            case TD::String:
+                V = new VarObj(nm, (char*) &((**Data).str[4]), *((int*) (**Data).str)); break;
             default:
                 ObjectErr = true; ObjectErrStr = "Unsupported data type: " + (tStr->type);
                 break;
@@ -158,43 +158,43 @@ void* ToVariant(U8ArrayHdl TypeStr, LStrHandle Data, LStrHandle Image, bool GetI
 int FromVariant(VarObj* LvVarObj, U8ArrayHdl TypeStr, LStrHandle Data, bool del) {
     TStrS* tStr;
     if (!IsVariant(LvVarObj)) return -1;
-        int NmSz = (LvVarObj->name == ""? 0: LvVarObj->name.length() + 2 - LvVarObj->name.length() % 2);
-        uint8_t NmOff; NmOff = (LvTypeDecriptor(LvVarObj) == TD::String ? 4 : 0);
-        switch LvTypeDecriptor(LvVarObj)    //  handle convertion to LV type strings
-        {
-        case TD::I8: case TD::U8: case TD::I16: case TD::U16: case TD::U32: case TD::I32:
-            DSSetHandleSize(TypeStr, sizeof(int32) + 4 + NmSz);
-            (**TypeStr).dimSize = 4 + NmOff + NmSz;
-            tStr = (TStrS*)(**TypeStr).elt;
-            tStr->fill = 0x00; tStr->size = 4 + NmOff + NmSz; tStr->type = LvTypeDecriptor(LvVarObj);
-            if (LvVarObj->name != "")
-               {tStr->nm =  0x40; tStr->c[NmOff] = LvVarObj->name.length();
-                memcpy(&tStr->c[1 + NmOff], LvVarObj->name.c_str(), tStr->c[NmOff]);}
-            break;
-        default:
-            ObjectErr = true; ObjectErrStr = "Unsupported data type: " + (LvTypeDecriptor(LvVarObj));
-            return -1;
-            break;
-        }
+    int NmSz = (LvVarObj->name == NULL? 0: LvVarObj->name->length() + 2 - LvVarObj->name->length() % 2);
+    uint8_t NmOff; NmOff = (LvTypeDecriptor(LvVarObj) == TD::String ? 4 : 0);
+    switch LvTypeDecriptor(LvVarObj)    //  handle convertion to LV type strings
+    {
+    case TD::I8: case TD::U8: case TD::I16: case TD::U16: case TD::U32: case TD::I32: case TD::String:
+        DSSetHandleSize(TypeStr, sizeof(int32) + 4 + NmSz);
+        (**TypeStr).dimSize = 4 + NmOff + NmSz;
+        tStr = (TStrS*)(**TypeStr).elt;
+        tStr->fill = 0x00; tStr->size = 4 + NmOff + NmSz; tStr->type = LvTypeDecriptor(LvVarObj);
+        if (LvVarObj->name != NULL)
+            {tStr->nm =  0x40; tStr->c[NmOff] = LvVarObj->name->length();
+            memcpy(&tStr->c[1 + NmOff], LvVarObj->name->c_str(), tStr->c[NmOff]);}
+        break;
+    default:
+        ObjectErr = true; ObjectErrStr = "Unsupported data type: " + (LvTypeDecriptor(LvVarObj));
+        return -1;
+        break;
+    }
 
-         switch (LvTypeDecriptor(LvVarObj))    //  handle convertion to LV data strings
-        {
-        case TD::I8: case TD::U8:
-            LV_str_cp(Data, string((char*) & LvVarObj->data, sizeof(int8))); break;
-        case TD::I16: case TD::U16:
-            LV_str_cp(Data, string((char*) & LvVarObj->data, sizeof(int16))); break;
-        case TD::U32: case TD::I32:
-            LV_str_cp(Data, string((char*)&LvVarObj->data, sizeof(int32))); break;
-        //case TD::String:
-            //  LV_str_cp(Data, string(((string*) (LvVarObj->data)).c_str(), sizeof(int32)));
-            //LV_str_cp(Data, string((char*)&LvVarObj->data, sizeof(int32))); break;
-        default:
-            ObjectErr = true; ObjectErrStr = "Unsupported data type: " + (LvTypeDecriptor(LvVarObj));
-            return -1;
-            break;
-        }
-        if (del) myVariants.remove(LvVarObj);
-        return 0;
+        switch (LvTypeDecriptor(LvVarObj))    //  handle convertion to LV data strings
+    {
+    case TD::I8: case TD::U8:
+        LV_str_cp(Data, string((char*) & LvVarObj->data, sizeof(int8))); break;
+    case TD::I16: case TD::U16:
+        LV_str_cp(Data, string((char*) & LvVarObj->data, sizeof(int16))); break;
+    case TD::U32: case TD::I32:
+        LV_str_cp(Data, string((char*) & LvVarObj->data, sizeof(int32))); break;
+    case TD::String:
+        int sz; sz = LvVarObj->str->length();
+        LV_str_cp(Data, (char*) &sz, sizeof(int)); LV_str_cat(Data, *(LvVarObj->str)); break;
+    default:
+        ObjectErr = true; ObjectErrStr = "Unsupported data type: " + (LvTypeDecriptor(LvVarObj));
+        return -1;
+        break;
+    }
+    if (del) myVariants.remove(LvVarObj);
+    return 0;
 }
 
 int DeleteVariant(VarObj* LvVarObj) {
