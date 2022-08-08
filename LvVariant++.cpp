@@ -71,9 +71,9 @@ LStrHandle LVStr(char* str, int size)
 //class LvType {public: enum e;}
 #endif //   LabVIEW stuff
 
-#define VAR_TYPES int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, float, double, string*, uint8_t*
+#define VAR_TYPES int8, uInt8, int16, uInt16, int32, uInt32, float, double, string*, uint8_t*
 uint8_t GetLVTD(int idx) {
-    uint8_t types[] = {TD::I8, TD::U8, TD::I16, TD::U16, TD::U32, TD::I32, TD::SGL, TD::DBL, TD::String, TD::Array};
+    uint8_t types[] = {TD::I8, TD::U8, TD::I16, TD::U16, TD::I32, TD::U32, TD::SGL, TD::DBL, TD::String, TD::Array};
     return types[idx];
 }
 #define MAGIC 0x13131313    //  random/unique, non 0x00000000 and 0xffffffff number
@@ -89,12 +89,14 @@ public:
 
     VarObj(string n, bool SetNull)
         {IsNull = SetNull; addr = (SetNull ? this : NULL); if (n.length() > 0) name = new string(n);}
-    VarObj(string n, int8   d) { data = d; addr = this; if (n.length() > 0) name = new string(n); }
-    VarObj(string n, uInt8  d) { data = d; addr = this; if (n.length() > 0) name = new string(n); }
-    VarObj(string n, int16  d) { data = d; addr = this; if (n.length() > 0) name = new string(n); }
-    VarObj(string n, uInt16 d) { data = d; addr = this; if (n.length() > 0) name = new string(n); }
-    VarObj(string n, int32  d) { data = d; addr = this; if (n.length() > 0) name = new string(n); }
-    VarObj(string n, uInt32 d) { data = d; addr = this; if (n.length() > 0) name = new string(n); }
+    VarObj(string n, int8   d) { data = (int8)  d; addr = this; if (n.length() > 0) name = new string(n); }
+    VarObj(string n, uInt8  d) { data = (uInt8) d; addr = this; if (n.length() > 0) name = new string(n); }
+    VarObj(string n, int16  d) { data = (int16) d; addr = this; if (n.length() > 0) name = new string(n); }
+    VarObj(string n, uInt16 d) { data = (uInt16)d; addr = this; if (n.length() > 0) name = new string(n); }
+    VarObj(string n, int32  d) { data = (int32) d; addr = this; if (n.length() > 0) name = new string(n); }
+    VarObj(string n, uInt32 d) { data = (uInt32)d; addr = this; if (n.length() > 0) name = new string(n); }
+    VarObj(string n, float  d) { data = (float) d; addr = this; if (n.length() > 0) name = new string(n); }
+    VarObj(string n, double d) { data = (double)d; addr = this; if (n.length() > 0) name = new string(n); }
     VarObj(string n,  char* d, int sz) {
         data = (string*) NULL; addr = this; if (sz > 0) str = new string(d, sz);
         if (n.length() > 0) name = new string(n);}
@@ -156,6 +158,10 @@ void* ToVariant(U8ArrayHdl TypeStr, LStrHandle Data, LStrHandle Image, bool GetI
         V = new VarObj(nm, (int32) *  ((int32*) (**Data).str)); break;
     case TD::U32:
         V = new VarObj(nm, (uInt32) * ((uInt32*)(**Data).str)); break;
+    case TD::SGL:
+        V = new VarObj(nm, (float) * ((float*)(**Data).str)); break;
+    case TD::DBL:
+        V = new VarObj(nm, (double) * ((double*)(**Data).str)); break;
     case TD::String:
         V = new VarObj(nm, (char*) &((**Data).str[4]), *((int*) (**Data).str)); break;
     default:
@@ -167,7 +173,7 @@ void* ToVariant(U8ArrayHdl TypeStr, LStrHandle Data, LStrHandle Image, bool GetI
     return V;
 }
 
-#define LvTypeDecriptor(A) ((uInt16) (A->IsNull ? 0 : GetLVTD(A->data.index())))
+#define LvTypeDecriptor(A) ((uInt8) (A->IsNull ? 0 : GetLVTD(A->data.index())))
 
 int FromVariant(VarObj* LvVarObj, U8ArrayHdl TypeStr, LStrHandle Data, bool del) {
     if (!IsVariant(LvVarObj)) return -1;
@@ -185,6 +191,7 @@ int FromVariant(VarObj* LvVarObj, U8ArrayHdl TypeStr, LStrHandle Data, bool del)
     {
     case TD::Void:
     case TD::I8: case TD::U8: case TD::I16: case TD::U16: case TD::U32: case TD::I32:
+    case TD::SGL: case TD::DBL:
     case TD::String:
         (**TypeStr).dimSize = NmSz;
         tStr = (TStrS*)(**TypeStr).elt;
@@ -208,8 +215,10 @@ int FromVariant(VarObj* LvVarObj, U8ArrayHdl TypeStr, LStrHandle Data, bool del)
         LV_str_cp(Data, string((char*) & LvVarObj->data, sizeof(int8))); break;
     case TD::I16: case TD::U16:
         LV_str_cp(Data, string((char*) & LvVarObj->data, sizeof(int16))); break;
-    case TD::U32: case TD::I32:
+    case TD::U32: case TD::I32: case TD::SGL:
         LV_str_cp(Data, string((char*) & LvVarObj->data, sizeof(int32))); break;
+    case TD::DBL:
+        LV_str_cp(Data, string((char*)&LvVarObj->data, sizeof(double))); break;
     case TD::String:
         int sz; sz = 0; 
         if (LvVarObj->str != NULL)
