@@ -76,9 +76,7 @@ uint8_t GetLVTD(int idx) {
     uint8_t types[] = {TD::I8, TD::U8, TD::I16, TD::U16, TD::U32, TD::I32, TD::SGL, TD::DBL, TD::String, TD::Array};
     return types[idx];
 }
-#define MAGIC 0x13131313    //  doesn't necessarily need to be unique to this, specific library
-
-static std::list<string> myVariantsStr, myVariantsNm;   //  where we store the actual strings and names
+#define MAGIC 0x13131313    //  random/unique, non 0x00000000 and 0xffffffff number
 
 class VarObj
 {
@@ -87,13 +85,23 @@ public:
     bool IsNull = false;    //  NULL variants are important, DB and XML results can often return NULL
     string *name = NULL, *str = NULL;
     variant<VAR_TYPES> data;
-    VarObj(string n, int32_t d) {data = d; addr = this; if (n.length() > 0) name = new string(n);}
+    int errnum = 0; string *errstr = NULL;  //  user-defined, object-specific error info (like invalid)
+
     VarObj(string n, bool SetNull)
         {IsNull = SetNull; addr = (SetNull ? this : NULL); if (n.length() > 0) name = new string(n);}
+    VarObj(string n, int8   d) { data = d; addr = this; if (n.length() > 0) name = new string(n); }
+    VarObj(string n, uInt8  d) { data = d; addr = this; if (n.length() > 0) name = new string(n); }
+    VarObj(string n, int16  d) { data = d; addr = this; if (n.length() > 0) name = new string(n); }
+    VarObj(string n, uInt16 d) { data = d; addr = this; if (n.length() > 0) name = new string(n); }
+    VarObj(string n, int32  d) { data = d; addr = this; if (n.length() > 0) name = new string(n); }
+    VarObj(string n, uInt32 d) { data = d; addr = this; if (n.length() > 0) name = new string(n); }
     VarObj(string n,  char* d, int sz) {
         data = (string*) NULL; addr = this; if (sz > 0) str = new string(d, sz);
         if (n.length() > 0) name = new string(n);}
-    ~VarObj() {delete name; delete str;}
+    ~VarObj() {delete name; delete str; delete errstr;}
+
+    void SetError(int number, string str)
+        {errnum = number; if (str.length() > 0) errstr = new string(str);}
 
     bool operator< (const VarObj rhs) const { return addr < rhs.addr; }
     bool operator<= (const VarObj rhs) const { return addr <= rhs.addr; }
@@ -136,8 +144,18 @@ void* ToVariant(U8ArrayHdl TypeStr, LStrHandle Data, LStrHandle Image, bool GetI
     {
     case TD::Void:    //  note, LabVIEW drops names on std flatten, though user can add
         V = new VarObj(nm, true); break;
+    case TD::I8:
+        V = new VarObj(nm, (int8) * ((int8*)(**Data).str)); break;
+    case TD::U8:
+        V = new VarObj(nm, (uInt8) * ((uInt8*)(**Data).str)); break;
+    case TD::I16:
+        V = new VarObj(nm, (int16) *  ((int16*) (**Data).str)); break;
+    case TD::U16:
+        V = new VarObj(nm, (uInt16) * ((uInt16*)(**Data).str)); break;
     case TD::I32:
-        V = new VarObj(nm, *((int32_t*)  (**Data).str)); break;
+        V = new VarObj(nm, (int32) *  ((int32*) (**Data).str)); break;
+    case TD::U32:
+        V = new VarObj(nm, (uInt32) * ((uInt32*)(**Data).str)); break;
     case TD::String:
         V = new VarObj(nm, (char*) &((**Data).str[4]), *((int*) (**Data).str)); break;
     default:
@@ -204,13 +222,13 @@ int FromVariant(VarObj* LvVarObj, U8ArrayHdl TypeStr, LStrHandle Data, bool del)
         return -1;
         break;
     }
-    if (del) myVariants.remove(LvVarObj);
+    if (del) {myVariants.remove(LvVarObj); delete LvVarObj;}
     return 0;
 }
 
 int DeleteVariant(VarObj* LvVarObj) {
     if (!IsVariant(LvVarObj)) return -1;
-    myVariants.remove(LvVarObj); return 0;
+    myVariants.remove(LvVarObj); delete LvVarObj; return 0;
 }
 
 #if 1    //  the following are utility-ish functions
@@ -220,6 +238,12 @@ void GetError(VarObj* LvVarObj, tLvVarErr* error) { //  get error info from vari
         error->errnum = -1;
         error->errstr = LVStr(ObjectErrStr);
         ObjectErr = false; ObjectErrStr = "NO ERROR"; //  Clear error, but race conditions may exist, if so, da shit has hit da fan. 
+    }
+    else
+    {   //  the SetError() method allows the user to attach object-specific error info (like type mismatch)
+        error->errnum = LvVarObj->errnum;
+        error->errstr = LVStr(*(LvVarObj->errstr));
+        LvVarObj->errnum = 0; delete LvVarObj->errstr;
     }
 }
 
