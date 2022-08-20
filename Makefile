@@ -1,6 +1,6 @@
 ##############################################################################
 #
-#                     Makefile for LvVariant.so
+#                     Makefile for LvVariant++.so
 #
 ##############################################################################
 
@@ -10,6 +10,7 @@ CC = gcc
 C++ = g++
 CFLAGS = -g -m32 -fPIC -Di686
 CXXFLAGS = -g -m32 -std=gnu++17 -lstdc++
+OBJ = .o
 
 # LabVIEW
 INCLUDES := $(INCLUDES)  -I/usr/local/lv71/cintools
@@ -22,7 +23,7 @@ DLLFLAGS = -shared -m32
 .SUFFIXES:
 .SUFFIXES: .c .cpp .o .so
 
-OBJECTS = LvVariant.$(OBJ)
+OBJECTS = LvVariant++.$(OBJ)
 
 .c:
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(LIBS)
@@ -38,25 +39,19 @@ OBJECTS = LvVariant.$(OBJ)
 
 all:    LvVariant++.so
 
-LvVariant++:	LvVariant++.o
-	$(C++) $(CXXFLAGS) -o $@ $? $(MYSQLCPP_LIB) -ldl -lpthread -lresolv -lssl -lcrypto
-
 LvVariant++.so: LvVariant++.cpp
 	$(C++) $(CXXFLAGS) -shared -fPIC -o $@ $? $(INCLUDES) $(LIBS)\
 	 -ldl -lpthread -lresolv -lssl -lcrypto
 
-LvVariant.so:    $(OBJECTS)
-	$(CC) $(DLLFLAGS) -o $@ $(OBJECTS) $(LIBS)
-
-LvVariant.dll:    $(OBJECTS)
+LvVariant++.dll:    $(OBJECTS)
 	$(LINKER) $(DLLFLAGS) $(OBJECTS) $(LIBS)
 
 clean:
 	 rm -f\
-	 LvVariant.$(SUFFIX) *.$(OBJ) LvVariant++
+	 LvVariant++.$(SUFFIX) *.$(OBJ) LvVariant++
 
 dist:
-	 tar cvfz LvVariant.tgz *.c *.h Makefile *.llb
+	 tar cvfz LvVariant++.tgz *.c *.h Makefile *.llb
 
 test:    LvVariant++.so
 	 $(CC) $(CXXFLAGS) test.cpp -o test $<
