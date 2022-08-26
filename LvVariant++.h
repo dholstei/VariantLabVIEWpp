@@ -50,13 +50,23 @@ public:
     VarObj(std::string n, int16_t  d) ;
     VarObj(std::string n, uint16_t d) ;
     VarObj(std::string n, int32_t  d) ;
-    VarObj(std::string n, uint32_t d);
-    VarObj(std::string n, float    d);
-    VarObj(std::string n, double   d);
+    VarObj(std::string n, uint32_t d) ;
+    VarObj(std::string n, float    d) ;
+    VarObj(std::string n, double   d) ;
     VarObj(std::string n, char* d, int sz) ;
     ~VarObj() ;
 
     void SetError(int number, std::string str);
+    VarObj* operator= (bool SetNull);
+    VarObj* operator= (int8_t   d);
+    VarObj* operator= (uint8_t  d);
+    VarObj* operator= (int16_t  d);
+    VarObj* operator= (uint16_t d);
+    VarObj* operator= (int32_t  d);
+    VarObj* operator= (uint32_t d);
+    VarObj* operator= (float    d);
+    VarObj* operator= (double   d);
+    VarObj* operator= (string* d);
 
     bool operator< (const VarObj rhs) const ;
     bool operator<= (const VarObj rhs) const ;

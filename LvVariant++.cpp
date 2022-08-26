@@ -66,9 +66,7 @@ uint8_t GetLVTD(int idx) {
 #define MAGIC 0x13131313    //  random/unique, non 0x00000000 and 0xffffffff number
 
 VarObj::VarObj(std::string n, bool SetNull)
-{
-    IsNull = SetNull; addr = (SetNull ? this : NULL); if (n.length() > 0) name = new std::string(n);
-}
+{IsNull = SetNull; addr = (SetNull ? this : NULL); if (n.length() > 0) name = new std::string(n); }
 VarObj::VarObj(std::string n, int8_t   d) { data = d; addr = this; if (n.length() > 0) name = new std::string(n); }
 VarObj::VarObj(std::string n, uint8_t  d) { data = d; addr = this; if (n.length() > 0) name = new std::string(n); }
 VarObj::VarObj(std::string n, int16_t  d) { data = d; addr = this; if (n.length() > 0) name = new std::string(n); }
@@ -84,9 +82,19 @@ VarObj::VarObj(std::string n, char* d, int sz) {
 VarObj::~VarObj() { delete name; delete str; delete errstr; }
 
 void VarObj::SetError(int number, std::string str)
-{
-    errnum = number; if (str.length() > 0) errstr = new std::string(str);
-}
+{errnum = number; if (str.length() > 0) errstr = new std::string(str);}
+
+VarObj* VarObj::operator= (bool SetNull) { data = SetNull; return (VarObj*) addr; }
+VarObj* VarObj::operator= (int8_t   d) { data = d;  return (VarObj*) addr; }
+VarObj* VarObj::operator= (uint8_t  d) { data = d;  return (VarObj*) addr; }
+VarObj* VarObj::operator= (int16_t  d) { data = d;  return (VarObj*) addr; }
+VarObj* VarObj::operator= (uint16_t d) { data = d;  return (VarObj*) addr; }
+VarObj* VarObj::operator= (int32_t  d) { data = d;  return (VarObj*) addr; }
+VarObj* VarObj::operator= (uint32_t d) { data = d;  return (VarObj*) addr; }
+VarObj* VarObj::operator= (float    d) { data = d;  return (VarObj*) addr; }
+VarObj* VarObj::operator= (double   d) { data = d;  return (VarObj*) addr; }
+VarObj* VarObj::operator= (string* d)
+    { delete str; if (d->size() > 0) str = d;  return (VarObj*) addr; }
 
 bool VarObj::operator< (const VarObj rhs) const { return addr < rhs.addr; }
 bool VarObj::operator<= (const VarObj rhs) const { return addr <= rhs.addr; }
@@ -153,6 +161,40 @@ void* ToVariant(U8ArrayHdl TypeStr, LStrHandle Data, LStrHandle Image, bool GetI
     if (V != NULL)
         {myVariants.push_back(V);if (GetImage) LV_str_cp(Image, string((char*) V, sizeof(VarObj)));}
     return V;
+}
+
+int AssignVal(VarObj* LvVarObj, U8ArrayHdl TypeStr, LStrHandle Data) {
+    if (!IsVariant(LvVarObj)) return -1;
+    if ((**TypeStr).dimSize == 0)
+        {LvVarObj->errnum = -1; LvVarObj->errstr = new string("NULL data in assignment"); return -1;}
+    TStrS *tStr = (TStrS*) (**TypeStr).elt;
+    switch (tStr->type)
+    {
+    case TD::Void:
+         break;
+    case TD::I8:
+        LvVarObj = (VarObj*) ((int8*)(**Data).str); break;
+    case TD::U8:
+        LvVarObj = (VarObj*) ((uInt8*)(**Data).str); break;
+    case TD::I16:
+        LvVarObj = (VarObj*) ((int16*)(**Data).str); break;
+    case TD::U16:
+        LvVarObj = (VarObj*) ((uInt16*)(**Data).str); break;
+    case TD::I32:
+        LvVarObj = (VarObj*) ((int32*)(**Data).str); break;
+    case TD::U32:
+        LvVarObj = (VarObj*) ((uInt32*)(**Data).str); break;
+    case TD::SGL:
+        LvVarObj = (VarObj*) ((float*)(**Data).str); break;
+    case TD::DBL:
+        LvVarObj = (VarObj*) ((double*)(**Data).str); break;
+    case TD::String:
+        LvVarObj = (VarObj*) new string((char*)&((**Data).str[4]), *((int*)(**Data).str)); break;
+    default:
+        {LvVarObj->errnum = -1; LvVarObj->errstr = new string("Invalid data type in assignment"); return -1; }
+        break;
+    }
+    return -1;
 }
 
 #define LvTypeDecriptor(A) ((uInt8) (A->IsNull ? 0 : GetLVTD(A->data.index())))
