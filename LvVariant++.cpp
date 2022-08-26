@@ -11,23 +11,11 @@
 #include <iostream> //  std::cout
 #include <inttypes.h>
 #include <memory.h>
+#include "LvVariant++.h"
 
 using namespace std;
 
 #if 1   //  LabVIEW stuff
-#include "extcode.h"
-typedef struct {
-    long errnum;
-    LStrHandle errstr;
-    LStrHandle errdata;
-} tLvVarErr;
-typedef struct {
-    int32_t dimSize;
-    uint8_t elt[1];
-} U8Array;
-typedef U8Array** U8ArrayHdl;
-#include "LvTypeDescriptors.h"
-#define LStrString(A) string((char*) (*A)->str, (*A)->cnt)
 void LV_str_cp(LStrHandle LV_string, string c_str)
 {
     DSSetHandleSize(LV_string, sizeof(int) + c_str.length() * sizeof(char));
@@ -68,7 +56,6 @@ LStrHandle LVStr(char* str, int size)
     memmove((char*)(*l)->str, str, ((*l)->cnt = size));
     return l;
 }
-//class LvType {public: enum e;}
 #endif //   LabVIEW stuff
 
 #define VAR_TYPES int8, uInt8, int16, uInt16, int32, uInt32, float, double, string*, uint8_t*
@@ -78,38 +65,33 @@ uint8_t GetLVTD(int idx) {
 }
 #define MAGIC 0x13131313    //  random/unique, non 0x00000000 and 0xffffffff number
 
-class VarObj
+VarObj::VarObj(std::string n, bool SetNull)
 {
-public:
-    void* addr;
-    bool IsNull = false;    //  NULL variants are important, DB and XML results can often return NULL
-    string *name = NULL, *str = NULL;
-    variant<VAR_TYPES> data;
-    int errnum = 0; string *errstr = NULL;  //  user-defined, object-specific error info (like invalid)
+    IsNull = SetNull; addr = (SetNull ? this : NULL); if (n.length() > 0) name = new std::string(n);
+}
+VarObj::VarObj(std::string n, int8_t   d) { data = d; addr = this; if (n.length() > 0) name = new std::string(n); }
+VarObj::VarObj(std::string n, uint8_t  d) { data = d; addr = this; if (n.length() > 0) name = new std::string(n); }
+VarObj::VarObj(std::string n, int16_t  d) { data = d; addr = this; if (n.length() > 0) name = new std::string(n); }
+VarObj::VarObj(std::string n, uint16_t d) { data = d; addr = this; if (n.length() > 0) name = new std::string(n); }
+VarObj::VarObj(std::string n, int32_t  d) { data = d; addr = this; if (n.length() > 0) name = new std::string(n); }
+VarObj::VarObj(std::string n, uint32_t d) { data = d; addr = this; if (n.length() > 0) name = new std::string(n); }
+VarObj::VarObj(string n, float  d) { data = (float)d; addr = this; if (n.length() > 0) name = new string(n); }
+VarObj::VarObj(string n, double d) { data = (double)d; addr = this; if (n.length() > 0) name = new string(n); }
+VarObj::VarObj(std::string n, char* d, int sz) {
+    data = (std::string*)NULL; addr = this; if (sz > 0) str = new std::string(d, sz);
+    if (n.length() > 0) name = new std::string(n);
+}
+VarObj::~VarObj() { delete name; delete str; delete errstr; }
 
-    VarObj(string n, bool SetNull)
-        {IsNull = SetNull; addr = (SetNull ? this : NULL); if (n.length() > 0) name = new string(n);}
-    VarObj(string n, int8   d) { data = (int8)  d; addr = this; if (n.length() > 0) name = new string(n); }
-    VarObj(string n, uInt8  d) { data = (uInt8) d; addr = this; if (n.length() > 0) name = new string(n); }
-    VarObj(string n, int16  d) { data = (int16) d; addr = this; if (n.length() > 0) name = new string(n); }
-    VarObj(string n, uInt16 d) { data = (uInt16)d; addr = this; if (n.length() > 0) name = new string(n); }
-    VarObj(string n, int32  d) { data = (int32) d; addr = this; if (n.length() > 0) name = new string(n); }
-    VarObj(string n, uInt32 d) { data = (uInt32)d; addr = this; if (n.length() > 0) name = new string(n); }
-    VarObj(string n, float  d) { data = (float) d; addr = this; if (n.length() > 0) name = new string(n); }
-    VarObj(string n, double d) { data = (double)d; addr = this; if (n.length() > 0) name = new string(n); }
-    VarObj(string n,  char* d, int sz) {
-        data = (string*) NULL; addr = this; if (sz > 0) str = new string(d, sz);
-        if (n.length() > 0) name = new string(n);}
-    ~VarObj() {delete name; delete str; delete errstr;}
+void VarObj::SetError(int number, std::string str)
+{
+    errnum = number; if (str.length() > 0) errstr = new std::string(str);
+}
 
-    void SetError(int number, string str)
-        {errnum = number; if (str.length() > 0) errstr = new string(str);}
+bool VarObj::operator< (const VarObj rhs) const { return addr < rhs.addr; }
+bool VarObj::operator<= (const VarObj rhs) const { return addr <= rhs.addr; }
+bool VarObj::operator== (const VarObj rhs) const { return addr == rhs.addr; }
 
-    bool operator< (const VarObj rhs) const { return addr < rhs.addr; }
-    bool operator<= (const VarObj rhs) const { return addr <= rhs.addr; }
-    bool operator== (const VarObj rhs) const { return addr == rhs.addr; }
-    uint32_t canary_end = MAGIC;  //  check for buffer overrun/corruption
-};
 static std::list<VarObj*> myVariants;
 
 static string ObjectErrStr; //  where we store user-checked/non-API error messages
@@ -155,9 +137,9 @@ void* ToVariant(U8ArrayHdl TypeStr, LStrHandle Data, LStrHandle Image, bool GetI
     case TD::U16:
         V = new VarObj(nm, (uInt16) * ((uInt16*)(**Data).str)); break;
     case TD::I32:
-        V = new VarObj(nm, (int32) *  ((int32*) (**Data).str)); break;
+        V = new VarObj(nm, (int32_t) *  ((int32*) (**Data).str)); break;
     case TD::U32:
-        V = new VarObj(nm, (uInt32) * ((uInt32*)(**Data).str)); break;
+        V = new VarObj(nm, (uint32_t) * ((uInt32*)(**Data).str)); break;
     case TD::SGL:
         V = new VarObj(nm, (float) * ((float*)(**Data).str)); break;
     case TD::DBL:
@@ -249,7 +231,7 @@ void GetError(VarObj* LvVarObj, tLvVarErr* error) { //  get error info from vari
         ObjectErr = false; ObjectErrStr = "NO ERROR"; //  Clear error, but race conditions may exist, if so, da shit has hit da fan. 
     }
     else
-    {   //  the SetError() method allows the user to attach object-specific error info (like type mismatch)
+    {
         error->errnum = LvVarObj->errnum;
         error->errstr = LVStr(*(LvVarObj->errstr));
         LvVarObj->errnum = 0; delete LvVarObj->errstr;
