@@ -76,25 +76,35 @@ VarObj::VarObj(std::string n, uint32_t d) { data = d; addr = this; if (n.length(
 VarObj::VarObj(string n, float  d) { data = (float)d; addr = this; if (n.length() > 0) name = new string(n); }
 VarObj::VarObj(string n, double d) { data = (double)d; addr = this; if (n.length() > 0) name = new string(n); }
 VarObj::VarObj(std::string n, char* d, int sz) {
-    data = (std::string*)NULL; addr = this; if (sz > 0) str = new std::string(d, sz);
+    if (sz > 0) data = new std::string(d, sz); else data = (string*) NULL;
+    addr = this; 
     if (n.length() > 0) name = new std::string(n);
 }
-VarObj::~VarObj() { delete name; delete str; delete errstr; }
+VarObj::~VarObj() {
+    delete name; 
+    if (data.index() == 8) delete get<string*>(data); 
+    delete errstr; }
 
-void VarObj::SetError(int number, std::string str)
-{errnum = number; if (str.length() > 0) errstr = new std::string(str);}
+#define SET_VALUE(a, d) \
+    if (data.index() == a) data = *d; \
+    else { errnum = -1; errstr = new string("Wrong data type, value unchanged. Variant: " + *name); }
 
-VarObj* VarObj::operator= (bool SetNull) { data = SetNull; return (VarObj*) addr; }
-VarObj* VarObj::operator= (int8_t   d) { data = d;  return (VarObj*) addr; }
-VarObj* VarObj::operator= (uint8_t  d) { data = d;  return (VarObj*) addr; }
-VarObj* VarObj::operator= (int16_t  d) { data = d;  return (VarObj*) addr; }
-VarObj* VarObj::operator= (uint16_t d) { data = d;  return (VarObj*) addr; }
-VarObj* VarObj::operator= (int32_t  d) { data = d;  return (VarObj*) addr; }
-VarObj* VarObj::operator= (uint32_t d) { data = d;  return (VarObj*) addr; }
-VarObj* VarObj::operator= (float    d) { data = d;  return (VarObj*) addr; }
-VarObj* VarObj::operator= (double   d) { data = d;  return (VarObj*) addr; }
-VarObj* VarObj::operator= (string* d)
-    { delete str; if (d->size() > 0) str = d;  return (VarObj*) addr; }
+void VarObj::value(int8_t*   d) { SET_VALUE(0, d); }
+void VarObj::value(uint8_t*  d) { SET_VALUE(1, d); }
+void VarObj::value(int16_t*  d) { SET_VALUE(2, d); }
+void VarObj::value(uint16_t* d) { SET_VALUE(3, d); }
+void VarObj::value(int32_t*  d) { SET_VALUE(4, d); }
+void VarObj::value(uint32_t* d) { SET_VALUE(5, d); }
+void VarObj::value(float*    d) { SET_VALUE(6, d); }
+void VarObj::value(double*   d) { SET_VALUE(7, d); }
+void VarObj::value(string*   d)
+{
+    if (data.index() == 8)
+       {delete get<string*>(data); data = (string*)NULL;
+        if (d->size() > 0) data = new string(*d);}
+    else 
+        {errnum = -1; errstr = new string("Wrong data type, value unchanged. Variant: " + *name); }
+}
 
 bool VarObj::operator< (const VarObj rhs) const { return addr < rhs.addr; }
 bool VarObj::operator<= (const VarObj rhs) const { return addr <= rhs.addr; }
@@ -163,7 +173,7 @@ void* ToVariant(U8ArrayHdl TypeStr, LStrHandle Data, LStrHandle Image, bool GetI
     return V;
 }
 
-int AssignVal(VarObj* LvVarObj, U8ArrayHdl TypeStr, LStrHandle Data) {
+int SetVal(VarObj* LvVarObj, U8ArrayHdl TypeStr, LStrHandle Data) {
     if (!IsVariant(LvVarObj)) return -1;
     if ((**TypeStr).dimSize == 0)
         {LvVarObj->errnum = -1; LvVarObj->errstr = new string("NULL data in assignment"); return -1;}
@@ -173,28 +183,28 @@ int AssignVal(VarObj* LvVarObj, U8ArrayHdl TypeStr, LStrHandle Data) {
     case TD::Void:
          break;
     case TD::I8:
-        LvVarObj = (VarObj*) ((int8*)(**Data).str); break;
+        LvVarObj->value((int8_t*)(**Data).str); break;
     case TD::U8:
-        LvVarObj = (VarObj*) ((uInt8*)(**Data).str); break;
+        LvVarObj->value((uint8_t*)(**Data).str); break;
     case TD::I16:
-        LvVarObj = (VarObj*) ((int16*)(**Data).str); break;
+        LvVarObj->value((int16*)(**Data).str); break;
     case TD::U16:
-        LvVarObj = (VarObj*) ((uInt16*)(**Data).str); break;
+        LvVarObj->value((uInt16*)(**Data).str); break;
     case TD::I32:
-        LvVarObj = (VarObj*) ((int32*)(**Data).str); break;
+        LvVarObj->value((int32_t*)(**Data).str); break;
     case TD::U32:
-        LvVarObj = (VarObj*) ((uInt32*)(**Data).str); break;
+        LvVarObj->value((uint32_t*)(**Data).str); break;
     case TD::SGL:
-        LvVarObj = (VarObj*) ((float*)(**Data).str); break;
+        LvVarObj->value((float*)(**Data).str); break;
     case TD::DBL:
-        LvVarObj = (VarObj*) ((double*)(**Data).str); break;
+        LvVarObj->value((double*)(**Data).str); break;
     case TD::String:
-        LvVarObj = (VarObj*) new string((char*)&((**Data).str[4]), *((int*)(**Data).str)); break;
+        LvVarObj->value (new string((char*)&((**Data).str[4]), *((int*)(**Data).str))); break;
     default:
         {LvVarObj->errnum = -1; LvVarObj->errstr = new string("Invalid data type in assignment"); return -1; }
         break;
     }
-    return -1;
+    return 0;
 }
 
 #define LvTypeDecriptor(A) ((uInt8) (A->IsNull ? 0 : GetLVTD(A->data.index())))
@@ -245,9 +255,9 @@ int FromVariant(VarObj* LvVarObj, U8ArrayHdl TypeStr, LStrHandle Data, bool del)
         LV_str_cp(Data, string((char*)&LvVarObj->data, sizeof(double))); break;
     case TD::String:
         int sz; sz = 0; 
-        if (LvVarObj->str != NULL)
-           {sz = LvVarObj->str->length();
-            LV_str_cp(Data, (char*) &sz, sizeof(int)); LV_str_cat(Data, *(LvVarObj->str));}
+        if (get<string*>(LvVarObj->data) != NULL)
+           {sz = get<string*>(LvVarObj->data)->length();
+            LV_str_cp(Data, (char*) &sz, sizeof(int)); LV_str_cat(Data, *(get<string*>(LvVarObj->data)));}
         else LV_str_cp(Data, (char*) &sz, sizeof(int));
         break;
     default:
@@ -275,8 +285,8 @@ void GetError(VarObj* LvVarObj, tLvVarErr* error) { //  get error info from vari
     else
     {
         error->errnum = LvVarObj->errnum;
-        error->errstr = LVStr(*(LvVarObj->errstr));
-        LvVarObj->errnum = 0; delete LvVarObj->errstr;
+        if (LvVarObj->errstr != NULL) error->errstr = LVStr(*(LvVarObj->errstr));
+        LvVarObj->errnum = 0; delete LvVarObj->errstr; LvVarObj->errstr = NULL;
     }
 }
 

@@ -11,7 +11,7 @@
 using namespace std;
 
 #define MAGIC 0x13131313    //  random/unique, non 0x00000000 and 0xffffffff number
-#define VAR_TYPES int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, float, double, std::string*
+#define VAR_TYPES int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, float, double, string*
 
 #if 1   //  LabVIEW stuff
 #include "extcode.h"
@@ -40,7 +40,7 @@ class VarObj
 public:
     void* addr;
     bool IsNull = false;    //  NULL variants are important, DB and XML results can often return NULL
-    std::string* name = NULL, * str = NULL;
+    string* name = NULL;
     variant<VAR_TYPES> data;
     int errnum = 0; std::string* errstr = NULL;  //  user-defined, object-specific error info (like invalid)
 
@@ -56,17 +56,15 @@ public:
     VarObj(std::string n, char* d, int sz) ;
     ~VarObj() ;
 
-    void SetError(int number, std::string str);
-    VarObj* operator= (bool SetNull);
-    VarObj* operator= (int8_t   d);
-    VarObj* operator= (uint8_t  d);
-    VarObj* operator= (int16_t  d);
-    VarObj* operator= (uint16_t d);
-    VarObj* operator= (int32_t  d);
-    VarObj* operator= (uint32_t d);
-    VarObj* operator= (float    d);
-    VarObj* operator= (double   d);
-    VarObj* operator= (string* d);
+    void value(int8_t*   d);
+    void value(uint8_t*  d);
+    void value(int16_t*  d);
+    void value(uint16_t* d);
+    void value(int32_t*  d);
+    void value(uint32_t* d);
+    void value(float*    d);
+    void value(double*   d);
+    void value(string*   d);
 
     bool operator< (const VarObj rhs) const ;
     bool operator<= (const VarObj rhs) const ;
