@@ -4,7 +4,6 @@
 // Desc:	Allows "Labview Variant" to "C++ variant" data exchange.  Will create a C++ variant reference
 //			from the LabVIEW "to flattened string" VI (with type array, which includes type, name and value).  Also,  
 //			convert C++ variant reference to LabVIEW flattened data for conversion into LabVIEW Variant
-#define VARIANT_LVPP_VERSION "Variant_LVPP-0.1"
 
 #include <list>     //  container of generated objects for error checking (avoid SEGFAULT)
 #include <variant>  //  container for variant data
@@ -58,7 +57,6 @@ LStrHandle LVStr(char* str, int size)
 }
 #endif //   LabVIEW stuff
 
-#define VAR_TYPES int8, uInt8, int16, uInt16, int32, uInt32, float, double, string*, uint8_t*
 uint8_t GetLVTD(int idx) {
     uint8_t types[] = {TD::I8, TD::U8, TD::I16, TD::U16, TD::I32, TD::U32, TD::SGL, TD::DBL, TD::String, TD::Array};
     return types[idx];
@@ -286,7 +284,9 @@ void GetError(VarObj* LvVarObj, tLvVarErr* error) { //  get error info from vari
     {
         error->errnum = LvVarObj->errnum;
         if (LvVarObj->errstr != NULL) error->errstr = LVStr(*(LvVarObj->errstr));
+        if (LvVarObj->errdata != NULL) error->errdata = LVStr(*(LvVarObj->errdata));
         LvVarObj->errnum = 0; delete LvVarObj->errstr; LvVarObj->errstr = NULL;
+        delete LvVarObj->errdata; LvVarObj->errdata = NULL;
     }
 }
 

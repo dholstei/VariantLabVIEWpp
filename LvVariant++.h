@@ -1,5 +1,3 @@
-#pragma once
-
 #define VARIANT_LVPP_VERSION "Variant_LVPP-0.2"
 
 #include <list>     //  container of generated objects for error checking (avoid SEGFAULT)
@@ -42,7 +40,8 @@ public:
     bool IsNull = false;    //  NULL variants are important, DB and XML results can often return NULL
     string* name = NULL;
     variant<VAR_TYPES> data;
-    int errnum = 0; std::string* errstr = NULL;  //  user-defined, object-specific error info (like invalid)
+    int errnum = 0; std::string* errstr = NULL;
+    std::string* errdata = NULL;  //  user-defined, object-specific error info (like invalid)
 
     VarObj(std::string n, bool SetNull) ;
     VarObj(std::string n, int8_t   d) ;
