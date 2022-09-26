@@ -63,25 +63,26 @@ uint8_t GetLVTD(int idx) {
 }
 #define MAGIC 0x13131313    //  random/unique, non 0x00000000 and 0xffffffff number
 
-VarObj::VarObj(std::string n, bool SetNull)
-{IsNull = SetNull; addr = (SetNull ? this : NULL); if (n.length() > 0) name = new std::string(n); }
-VarObj::VarObj(std::string n, int8_t   d) { data = d; addr = this; if (n.length() > 0) name = new std::string(n); }
-VarObj::VarObj(std::string n, uint8_t  d) { data = d; addr = this; if (n.length() > 0) name = new std::string(n); }
-VarObj::VarObj(std::string n, int16_t  d) { data = d; addr = this; if (n.length() > 0) name = new std::string(n); }
-VarObj::VarObj(std::string n, uint16_t d) { data = d; addr = this; if (n.length() > 0) name = new std::string(n); }
-VarObj::VarObj(std::string n, int32_t  d) { data = d; addr = this; if (n.length() > 0) name = new std::string(n); }
-VarObj::VarObj(std::string n, uint32_t d) { data = d; addr = this; if (n.length() > 0) name = new std::string(n); }
-VarObj::VarObj(string n, float  d) { data = (float)d; addr = this; if (n.length() > 0) name = new string(n); }
-VarObj::VarObj(string n, double d) { data = (double)d; addr = this; if (n.length() > 0) name = new string(n); }
-VarObj::VarObj(std::string n, char* d, int sz) {
-    if (sz > 0) data = new std::string(d, sz); else data = (string*) NULL;
+MSEXPORT VarObj::VarObj(string n, bool SetNull)
+{IsNull = SetNull; addr = (SetNull ? this : NULL); if (n.length() > 0) name = new string(n); }
+MSEXPORT VarObj::VarObj(string n, int8_t   d) { data = d; addr = this; if (n.length() > 0) name = new string(n); }
+MSEXPORT VarObj::VarObj(string n, uint8_t  d) { data = d; addr = this; if (n.length() > 0) name = new string(n); }
+MSEXPORT VarObj::VarObj(string n, int16_t  d) { data = d; addr = this; if (n.length() > 0) name = new string(n); }
+MSEXPORT VarObj::VarObj(string n, uint16_t d) { data = d; addr = this; if (n.length() > 0) name = new string(n); }
+MSEXPORT VarObj::VarObj(string n, int32_t  d) { data = d; addr = this; if (n.length() > 0) name = new string(n); }
+MSEXPORT VarObj::VarObj(string n, uint32_t d) { data = d; addr = this; if (n.length() > 0) name = new string(n); }
+MSEXPORT VarObj::VarObj(string n, float  d) { data = (float)d; addr = this; if (n.length() > 0) name = new string(n); }
+MSEXPORT VarObj::VarObj(string n, double d) { data = (double)d; addr = this; if (n.length() > 0) name = new string(n); }
+MSEXPORT VarObj::VarObj(string n, char* d, int sz) {
+    if (sz > 0) data = new string(d, sz); else data = (string*) NULL;
     addr = this; 
-    if (n.length() > 0) name = new std::string(n);
+    if (n.length() > 0) name = new string(n);
 }
-VarObj::~VarObj() {
+MSEXPORT VarObj::~VarObj() {
     delete name; 
     if (data.index() == 8) delete get<string*>(data); 
-    delete errstr; }
+    delete errstr; delete errdata;
+}
 
 #define SET_VALUE(a, d) \
     if (data.index() == a) data = *d; \
@@ -108,31 +109,33 @@ bool VarObj::operator< (const VarObj rhs) const { return addr < rhs.addr; }
 bool VarObj::operator<= (const VarObj rhs) const { return addr <= rhs.addr; }
 bool VarObj::operator== (const VarObj rhs) const { return addr == rhs.addr; }
 
-static std::list<VarObj*> myVariants;
+std::list<VarObj*> myVariants;
+MSEXPORT void AddToVarList(VarObj* V) { myVariants.push_back(V); }
 
-static string ObjectErrStr; //  where we store user-checked/non-API error messages
-static bool   ObjectErr;    //  set to "true" for user-checked/non-API error messages
+struct {bool err = false; string* str = NULL;} ObjErr; //  where we store user-checked/non-API error info
 
-bool IsVariant(VarObj* addr) //  check for corruption/validity, use <list> to track all open connections, avoid SEGFAULT
+MSEXPORT bool IsVariant(VarObj* addr) //  check for corruption/validity, use <list> to track all open connections, avoid SEGFAULT
 {
-    if (addr == NULL) { ObjectErrStr = "NULL Variant"; ObjectErr = true; return false; }
+    if (addr == NULL) {ObjErr.str = new string("NULL Variant"); ObjErr.err = true; return false;}
     bool b = false;
     for (auto i : myVariants) { if (i->addr == addr) {b = true; break;}}
-    if (!b) { ObjectErrStr = "Invalid Variant (unallocated memory or non-variant reference)"; ObjectErr = true; return false; }
+    if (!b) {ObjErr.str = new string("Invalid Variant (unallocated memory or non-variant reference)"); ObjErr.err = true; return false; }
 
-    if (addr->addr == addr && addr->canary_end == MAGIC) { ObjectErr = false; ObjectErrStr = "SUCCESS"; return true; }
-    else { ObjectErr = true; ObjectErrStr = "Variant memory corrupted"; return false; }
+    if (addr->addr == addr && addr->canary_end == MAGIC) { ObjErr.err = false; return true; }
+    else { ObjErr.err = true; ObjErr.str = new string("Variant memory corrupted"); return false; }
 }
 
+MSEXPORT tObjErr* GetObjErr() {return (tObjErr*) &ObjErr;}
+
 struct TStrS {uInt8 fill; uInt8 size; uInt8 nm; uInt8 type;
-              union {char c[0]; struct {uInt16 ff[2]; char c[0];} s;} c;}; //  match LabVIEW "Type String" structure/array
+              union {char c[1]; struct {uInt16 ff[2]; char c[1];} s;} c;}; //  match LabVIEW "Type String" structure/array
 
 extern "C" {  //  functions to be called from LabVIEW.  'extern "C"' is necessary to prevent overload name mangling
 
-void* ToVariant(U8ArrayHdl TypeStr, LStrHandle Data, LStrHandle Image, bool GetImage) {
+MSEXPORT void* ToVariant(U8ArrayHdl TypeStr, LStrHandle Data, LStrHandle Image, bool GetImage) {
     if ((**TypeStr).dimSize == 0)
-        {ObjectErr = true; ObjectErrStr = "NULL Type String"; return NULL;}
-    ObjectErr = false; ObjectErrStr = "SUCCESS";
+        {ObjErr.err = true; ObjErr.str = new string("NULL Type String"); return NULL;}
+    ObjErr.err = false;
 
     TStrS *tStr = (TStrS*) (**TypeStr).elt;
     string nm; bool named = tStr->nm & 0x40;
@@ -163,15 +166,15 @@ void* ToVariant(U8ArrayHdl TypeStr, LStrHandle Data, LStrHandle Image, bool GetI
     case TD::String:
         V = new VarObj(nm, (char*) &((**Data).str[4]), *((int*) (**Data).str)); break;
     default:
-        ObjectErr = true; ObjectErrStr = "Unsupported data type: " + (tStr->type);
+        ObjErr.err = true; ObjErr.str = new string("Unsupported data type: " + (tStr->type));
         break;
     }
     if (V != NULL)
-        {myVariants.push_back(V);if (GetImage) LV_str_cp(Image, string((char*) V, sizeof(VarObj)));}
+        {AddToVarList(V); if (GetImage) LV_str_cp(Image, string((char*) V, sizeof(VarObj)));}
     return V;
 }
 
-int SetVal(VarObj* LvVarObj, U8ArrayHdl TypeStr, LStrHandle Data) {
+MSEXPORT int SetVal(VarObj* LvVarObj, U8ArrayHdl TypeStr, LStrHandle Data) {
     if (!IsVariant(LvVarObj)) return -1;
     if ((**TypeStr).dimSize == 0)
         {LvVarObj->errnum = -1; LvVarObj->errstr = new string("NULL data in assignment"); return -1;}
@@ -207,12 +210,12 @@ int SetVal(VarObj* LvVarObj, U8ArrayHdl TypeStr, LStrHandle Data) {
 
 #define LvTypeDecriptor(A) ((uInt8) (A->IsNull ? 0 : GetLVTD(A->data.index())))
 
-int FromVariant(VarObj* LvVarObj, U8ArrayHdl TypeStr, LStrHandle Data, bool del) {
+MSEXPORT int FromVariant(VarObj* LvVarObj, U8ArrayHdl TypeStr, LStrHandle Data, bool del) {
     if (!IsVariant(LvVarObj)) return -1;
 //  NmSz:   Size of LV type string, in bytes, though type string is cast by LabVIEW to I16 (padded up)
 //          It includes the standard 4 byte header, an extra 4 0xff for strings, then the byte length of
 //          the variant name plus the name itself.
-    uInt8 NmSz = (LvVarObj->name == NULL? 0: LvVarObj->name->length() + 2 - LvVarObj->name->length() % 2)
+    uInt8 NmSz = (uInt8) (LvVarObj->name == NULL? 0: LvVarObj->name->length() + 2 - LvVarObj->name->length() % 2)
                 + 4 + (LvTypeDecriptor(LvVarObj) == TD::String ? 4 : 0);
     DSSetHandleSize(TypeStr, sizeof(int32) + NmSz);
     TStrS* tStr = (TStrS*) (**TypeStr).elt;
@@ -229,17 +232,17 @@ int FromVariant(VarObj* LvVarObj, U8ArrayHdl TypeStr, LStrHandle Data, bool del)
         tStr = (TStrS*)(**TypeStr).elt;
         tStr->fill = 0x00; tStr->size = NmSz; tStr->type = LvTypeDecriptor(LvVarObj);
         if (LvVarObj->name != NULL)
-            {tStr->nm =  0x40; LvName[0] = LvVarObj->name->length();
+            {tStr->nm =  0x40; LvName[0] = (char) LvVarObj->name->length();
             memcpy(&LvName[1], LvVarObj->name->c_str(), LvName[0]);}
         if (LvTypeDecriptor(LvVarObj) == TD::String) tStr->c.s.ff[0] = tStr->c.s.ff[1] = 0xffff;
         break;
     default:
-        ObjectErr = true; ObjectErrStr = "Unsupported data type: " + (LvTypeDecriptor(LvVarObj));
+        LvVarObj->errnum = -1; LvVarObj->errstr = new string("Unsupported data type: " + (LvTypeDecriptor(LvVarObj)));
         return -1;
         break;
     }
 
-    switch (LvTypeDecriptor(LvVarObj))    //  handle convertion to LV data strings
+    switch (LvTypeDecriptor(LvVarObj))    //  handle conversion to LV data strings
     {
     case TD::Void:
         break;
@@ -259,7 +262,7 @@ int FromVariant(VarObj* LvVarObj, U8ArrayHdl TypeStr, LStrHandle Data, bool del)
         else LV_str_cp(Data, (char*) &sz, sizeof(int));
         break;
     default:
-        ObjectErr = true; ObjectErrStr = "Unsupported data type: " + (LvTypeDecriptor(LvVarObj));
+        ObjErr.err = true; ObjErr.str = new string("Unsupported data type: " + (LvTypeDecriptor(LvVarObj)));
         return -1;
         break;
     }
@@ -267,32 +270,30 @@ int FromVariant(VarObj* LvVarObj, U8ArrayHdl TypeStr, LStrHandle Data, bool del)
     return 0;
 }
 
-int DeleteVariant(VarObj* LvVarObj) {
+MSEXPORT int DeleteVariant(VarObj* LvVarObj) {
     if (!IsVariant(LvVarObj)) return -1;
     myVariants.remove(LvVarObj); delete LvVarObj; return 0;
 }
 
 #if 1    //  the following are utility-ish functions
-void GetError(VarObj* LvVarObj, tLvVarErr* error) { //  get error info from variant object properties
-    if (LvVarObj == NULL || ObjectErr) {
-        if (!ObjectErr) return; //  no error
+MSEXPORT void GetError(VarObj* LvVarObj, tLvVarErr* error) { //  get error info from variant object properties
+    if (LvVarObj == NULL || ObjErr.err) { //  NULL object, or error in object creation
+        if (!ObjErr.err) return; //  no error
         error->errnum = -1;
-        error->errstr = LVStr(ObjectErrStr);
-        ObjectErr = false; ObjectErrStr = "NO ERROR"; //  Clear error, but race conditions may exist, if so, da shit has hit da fan. 
+        error->errstr = LVStr(*ObjErr.str);
+        ObjErr.err = false; delete ObjErr.str; ObjErr.str = NULL; //  Clear error, but race conditions may exist, if so, da shit has hit da fan. 
     }
-    else
+    else   //  API error info is stored in object, pass up to caller
     {
-        error->errnum = LvVarObj->errnum;
-        if (LvVarObj->errstr != NULL) error->errstr = LVStr(*(LvVarObj->errstr));
+        error->errnum = LvVarObj->errnum;  LvVarObj->errnum = 0;
+        if (LvVarObj->errstr  != NULL) error->errstr = LVStr(*(LvVarObj->errstr));
+            delete LvVarObj->errstr; LvVarObj->errstr = NULL;
         if (LvVarObj->errdata != NULL) error->errdata = LVStr(*(LvVarObj->errdata));
-        LvVarObj->errnum = 0; delete LvVarObj->errstr; LvVarObj->errstr = NULL;
-        delete LvVarObj->errdata; LvVarObj->errdata = NULL;
+            delete LvVarObj->errdata; LvVarObj->errdata = NULL;
     }
 }
 
-int SizeOfBool() {return sizeof(bool);}
-
-void Version(char* buf, int sz) {
+MSEXPORT void Version(char* buf, int sz) {
     memcpy(buf, string(VARIANT_LVPP_VERSION).c_str(), min<int>(sz, string(VARIANT_LVPP_VERSION).length()));}
 
 #endif
