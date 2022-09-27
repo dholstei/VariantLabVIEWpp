@@ -64,15 +64,15 @@ uint8_t GetLVTD(int idx) {
 #define MAGIC 0x13131313    //  random/unique, non 0x00000000 and 0xffffffff number
 
 MSEXPORT VarObj::VarObj(string n, bool SetNull)
-{IsNull = SetNull; addr = (SetNull ? this : NULL); if (n.length() > 0) name = new string(n); }
-MSEXPORT VarObj::VarObj(string n, int8_t   d) { data = d; addr = this; if (n.length() > 0) name = new string(n); }
-MSEXPORT VarObj::VarObj(string n, uint8_t  d) { data = d; addr = this; if (n.length() > 0) name = new string(n); }
-MSEXPORT VarObj::VarObj(string n, int16_t  d) { data = d; addr = this; if (n.length() > 0) name = new string(n); }
-MSEXPORT VarObj::VarObj(string n, uint16_t d) { data = d; addr = this; if (n.length() > 0) name = new string(n); }
-MSEXPORT VarObj::VarObj(string n, int32_t  d) { data = d; addr = this; if (n.length() > 0) name = new string(n); }
-MSEXPORT VarObj::VarObj(string n, uint32_t d) { data = d; addr = this; if (n.length() > 0) name = new string(n); }
-MSEXPORT VarObj::VarObj(string n, float  d) { data = (float)d; addr = this; if (n.length() > 0) name = new string(n); }
-MSEXPORT VarObj::VarObj(string n, double d) { data = (double)d; addr = this; if (n.length() > 0) name = new string(n); }
+{IsNull = SetNull; addr = (SetNull ? this : NULL); if (n.length() > 0) name = new string(n.c_str()); }
+MSEXPORT VarObj::VarObj(string n, int8_t   d) { data = d; addr = this; if (n.length() > 0) name = new string(n.c_str()); }
+MSEXPORT VarObj::VarObj(string n, uint8_t  d) { data = d; addr = this; if (n.length() > 0) name = new string(n.c_str()); }
+MSEXPORT VarObj::VarObj(string n, int16_t  d) { data = d; addr = this; if (n.length() > 0) name = new string(n.c_str()); }
+MSEXPORT VarObj::VarObj(string n, uint16_t d) { data = d; addr = this; if (n.length() > 0) name = new string(n.c_str()); }
+MSEXPORT VarObj::VarObj(string n, int32_t  d) { data = d; addr = this; if (n.length() > 0) name = new string(n.c_str()); }
+MSEXPORT VarObj::VarObj(string n, uint32_t d) { data = d; addr = this; if (n.length() > 0) name = new string(n.c_str()); }
+MSEXPORT VarObj::VarObj(string n, float  d) { data = (float)d; addr = this; if (n.length() > 0) name = new string(n.c_str()); }
+MSEXPORT VarObj::VarObj(string n, double d) { data = (double)d; addr = this; if (n.length() > 0) name = new string(n.c_str()); }
 MSEXPORT VarObj::VarObj(string n, char* d, int sz) {
     if (sz > 0) data = new string(d, sz); else data = (string*) NULL;
     addr = this; 
@@ -109,10 +109,10 @@ bool VarObj::operator< (const VarObj rhs) const { return addr < rhs.addr; }
 bool VarObj::operator<= (const VarObj rhs) const { return addr <= rhs.addr; }
 bool VarObj::operator== (const VarObj rhs) const { return addr == rhs.addr; }
 
-std::list<VarObj*> myVariants;
+static std::list<VarObj*> myVariants;
 MSEXPORT void AddToVarList(VarObj* V) { myVariants.push_back(V); }
 
-struct {bool err = false; string* str = NULL;} ObjErr; //  where we store user-checked/non-API error info
+static struct {bool err = false; string* str = NULL;} ObjErr; //  where we store user-checked/non-API error info
 
 MSEXPORT bool IsVariant(VarObj* addr) //  check for corruption/validity, use <list> to track all open connections, avoid SEGFAULT
 {
